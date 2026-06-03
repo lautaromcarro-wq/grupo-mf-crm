@@ -77,7 +77,7 @@ input[type=file]{display:none}
 .skip-link:hover{color:var(--text)}
 
 /* ── KPI GRID ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px}
 .kpi-grid.cols-3{grid-template-columns:repeat(3,1fr)}
 .kpi-grid.cols-2{grid-template-columns:repeat(2,1fr)}
 .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;transition:border-color .2s;position:relative;overflow:visible}
@@ -276,6 +276,22 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
 .kpi-card:hover .kpi-tooltip{visibility:visible;opacity:1}
 .kpi-tooltip-metric{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px}
 .kpi-tooltip-value{font-weight:700;font-size:14px;color:var(--accent)}
+/* ── COTIZACIONES ── */
+.cotiz-section{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
+.cotiz-title{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--orange);margin-bottom:10px}
+.cotiz-list{max-height:160px;overflow-y:auto;margin-bottom:12px}
+.cotiz-entry{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(34,34,40,.6);font-size:11px}
+.cotiz-entry:last-child{border-bottom:none}
+.cotiz-fecha{font-family:'DM Mono',monospace;color:var(--text-dim);font-size:10px;min-width:58px;flex-shrink:0}
+.cotiz-monto{font-family:'DM Mono',monospace;font-weight:700;color:var(--orange);min-width:70px;flex-shrink:0}
+.cotiz-desc{color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cotiz-estado-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;flex-shrink:0;transition:all .15s}
+.cotiz-enviada{background:rgba(249,115,22,.12);color:var(--orange);border:1px solid rgba(249,115,22,.25)}
+.cotiz-aceptada{background:rgba(59,130,246,.12);color:var(--accent);border:1px solid rgba(59,130,246,.25)}
+.cotiz-rechazada{background:rgba(255,77,109,.12);color:var(--red);border:1px solid rgba(255,77,109,.25)}
+.cotiz-vencida{background:rgba(74,74,86,.15);color:var(--muted);border:1px solid rgba(74,74,86,.2)}
+.cotiz-add{display:flex;gap:8px;align-items:flex-end}
+.cotiz-add .form-input{font-size:11px;padding:6px 8px}
 </style>
 </head>
 <body>
@@ -467,6 +483,7 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <th>Wpp</th>
           <th onclick="sortLeads('estado')">Estado <span class="sort-arrow" id="sort-leads-estado"></span></th>
           <th onclick="sortLeads('dias_pendiente')">Días pend. <span class="sort-arrow" id="sort-leads-dias_pendiente"></span></th>
+          <th onclick="sortLeads('cotiz_total')">Cotizado <span class="sort-arrow" id="sort-leads-cotiz_total"></span></th>
           <th>Acciones</th>
         </tr>
       </thead>
@@ -551,6 +568,7 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <option>OUTLET</option>
           <option>ELECTRÓNICA</option>
           <option>INTEGRADOR / PARTNER</option>
+          <option>LOCAL DE ROPA</option>
           <option>OTRO</option>
         </select>
       </div>
@@ -662,6 +680,7 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <option>OUTLET</option>
           <option>ELECTRÓNICA</option>
           <option>INTEGRADOR / PARTNER</option>
+          <option>LOCAL DE ROPA</option>
           <option>OTRO</option>
         </select>
       </div>
@@ -773,6 +792,15 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
         </select>
         <input class="form-input" id="historial-nota" type="text" placeholder="Nota..." style="flex:1">
         <button class="btn-action" onclick="addHistorialEntry()" style="padding:6px 12px">+ Registrar</button>
+      </div>
+    </div>
+    <div class="cotiz-section">
+      <div class="cotiz-title">Cotizaciones</div>
+      <div class="cotiz-list" id="modal-cotiz-list"></div>
+      <div class="cotiz-add">
+        <input class="form-input" id="cotiz-monto" type="number" placeholder="Monto ARS" min="0" style="width:120px">
+        <input class="form-input" id="cotiz-desc" type="text" placeholder="Descripción..." style="flex:1">
+        <button class="btn-action" onclick="addCotizacion()" style="padding:6px 12px;border-color:var(--orange);color:var(--orange)">+ Cotización</button>
       </div>
     </div>
     <div class="form-actions" style="margin-top:20px">
@@ -1237,6 +1265,8 @@ function renderDashboard(){
 
   const convRate = totalLeads>0?((clientesUnicos/totalLeads)*100).toFixed(1)+'%':'N/A';
   const ticketProm = ventas.length>0?'$'+Math.round(totalARS/ventas.length).toLocaleString():'N/A';
+  const pipeline = getPipelinePotencial();
+  const cotizAbiertas = DB.getLeads().reduce((n,l)=>n+(l.cotizaciones?l.cotizaciones.filter(c=>c.estado==='ENVIADA').length:0),0);
   document.getElementById('dash-kpis').innerHTML = `
     <div class="kpi-card">
       <div class="kpi-tooltip"><div class="kpi-tooltip-metric">Total Leads</div><div class="kpi-tooltip-value">${totalLeads.toLocaleString()} leads en la base de datos</div></div>
@@ -1249,6 +1279,10 @@ function renderDashboard(){
     <div class="kpi-card">
       <div class="kpi-tooltip"><div class="kpi-tooltip-metric">Facturado ARS</div><div class="kpi-tooltip-value">$${totalARS.toLocaleString('es-AR')} · Ticket prom: ${ticketProm}</div></div>
       <div class="kpi-label">Facturado ARS</div><div class="kpi-value orange">$${fmtARS(totalARS)}</div><div class="kpi-delta">${ventas.length.toLocaleString()} ventas</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-tooltip"><div class="kpi-tooltip-metric">Pipeline potencial</div><div class="kpi-tooltip-value">$${pipeline.toLocaleString('es-AR')} en ${cotizAbiertas} cotizaciones abiertas</div></div>
+      <div class="kpi-label">Pipeline potencial</div><div class="kpi-value purple">$${fmtARS(pipeline)}</div><div class="kpi-delta">${cotizAbiertas} cotización${cotizAbiertas!==1?'es':''} abierta${cotizAbiertas!==1?'s':''}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-tooltip"><div class="kpi-tooltip-metric">Pendientes</div><div class="kpi-tooltip-value">${leadAlerts.length} leads sin contactar · ${recompraAlerts.length} alertas recompra</div></div>
@@ -1384,7 +1418,8 @@ function renderLeadsTable(){
     if(['CONTACTADO','EN COTIZACIÓN','NEGOCIANDO'].includes(l.estado)&&l.fecha_ultimo_contacto) dp=daysSince(l.fecha_ultimo_contacto);
     else if(l.estado==='NUEVO') dp=daysSince(l.fecha_ingreso);
     else if(l.estado==='SIN RESPUESTA') dp=l.fecha_ultimo_contacto?daysSince(l.fecha_ultimo_contacto):daysSince(l.fecha_ingreso);
-    return {...l,dias_pendiente:dp};
+    const ct=getLeadCotizTotal(l);
+    return {...l,dias_pendiente:dp,cotiz_total:ct};
   });
 
   // Sort
@@ -1404,7 +1439,7 @@ function renderLeadsTable(){
 
   const tbody = document.getElementById('leads-tbody');
   if(slice.length===0){
-    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:40px">Sin resultados</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:40px">Sin resultados</td></tr>`;
     document.getElementById('leads-pagination').innerHTML='';
     return;
   }
@@ -1423,6 +1458,7 @@ function renderLeadsTable(){
       <td>${wppUrl(l.wpp)?'<a class="wpp-link" href="'+wppUrl(l.wpp)+'" target="_blank" rel="noopener">'+l.wpp+'</a>':(l.wpp||'—')}</td>
       <td>${estadoBadge}</td>
       <td>${alertDias||'—'}</td>
+      <td class="td-mono" style="color:${l.cotiz_total>0?'var(--orange)':'var(--text-dim)'};font-size:11px">${l.cotiz_total>0?'$'+fmtARS(l.cotiz_total):'—'}</td>
       <td><div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn-action" onclick="openLeadModal('${l.id}')">Editar</button>
         <button class="btn-action danger" onclick="deleteLead('${l.id}')">✕</button>
@@ -1553,8 +1589,11 @@ function openLeadModal(id){
   document.getElementById('conversion-box').classList.remove('show');
   document.getElementById('modal-lead-conversion').checked=true;
   renderHistorialList(lead.historial||[]);
+  renderCotizList(lead.cotizaciones||[]);
   document.getElementById('historial-tipo').value='CONTACTO';
   document.getElementById('historial-nota').value='';
+  document.getElementById('cotiz-monto').value='';
+  document.getElementById('cotiz-desc').value='';
   document.getElementById('modal-lead').classList.add('open');
 }
 
@@ -1898,6 +1937,81 @@ function addHistorialEntry(){
   renderHistorialList(historial);
   document.getElementById('historial-nota').value='';
   showToast('Registro agregado al historial','success');
+}
+
+// ── Cotizaciones ──
+function renderCotizList(cotizaciones){
+  const el=document.getElementById('modal-cotiz-list');
+  if(!cotizaciones||!cotizaciones.length){el.innerHTML='<div style="color:var(--text-dim);font-size:11px;padding:6px 0">Sin cotizaciones</div>';return;}
+  el.innerHTML=cotizaciones.map(c=>{
+    const cls='cotiz-'+c.estado.toLowerCase();
+    const nextStates={ENVIADA:['ACEPTADA','RECHAZADA','VENCIDA'],ACEPTADA:[],RECHAZADA:['ENVIADA'],VENCIDA:['ENVIADA']};
+    const actions=nextStates[c.estado]||[];
+    const actionsHtml=actions.map(s=>`<span class="cotiz-estado-badge cotiz-${s.toLowerCase()}" onclick="changeCotizEstado('${c.id}','${s}')" title="Cambiar a ${s}">${s}</span>`).join(' ');
+    return `<div class="cotiz-entry">
+      <span class="cotiz-fecha">${formatDate(c.fecha)}</span>
+      <span class="cotiz-monto">$${fmtARS(c.monto_ars)}</span>
+      <span class="cotiz-desc" title="${(c.descripcion||'').replace(/"/g,'&quot;')}">${c.descripcion||'—'}</span>
+      <span class="cotiz-estado-badge ${cls}">${c.estado}</span>
+      ${actionsHtml}
+    </div>`;
+  }).join('');
+}
+
+function addCotizacion(){
+  const id=document.getElementById('modal-lead-id').value;
+  const monto=parseFloat(document.getElementById('cotiz-monto').value);
+  if(!monto||monto<=0){showToast('Ingresá un monto válido','error');return;}
+  const desc=document.getElementById('cotiz-desc').value.trim();
+  const lead=DB.getLeads().find(l=>l.id===id);
+  if(!lead) return;
+  const cotizaciones=(lead.cotizaciones||[]).slice();
+  cotizaciones.unshift({id:uid(),fecha:todayStr(),monto_ars:monto,descripcion:desc,estado:'ENVIADA'});
+  DB.updateLead(id,{cotizaciones});
+  // Auto-change estado to EN COTIZACIÓN if still NUEVO or CONTACTADO
+  if(['NUEVO','CONTACTADO'].includes(lead.estado)){
+    DB.updateLead(id,{estado:'EN COTIZACIÓN'});
+    document.getElementById('modal-lead-estado').value='EN COTIZACIÓN';
+  }
+  renderCotizList(cotizaciones);
+  document.getElementById('cotiz-monto').value='';
+  document.getElementById('cotiz-desc').value='';
+  showToast('Cotización agregada','success');
+  // Add historial entry
+  const historial=(lead.historial||[]).slice();
+  historial.unshift({fecha:todayStr(),tipo:'NOTA',nota:`Cotización enviada: $${fmtARS(monto)}${desc?' — '+desc:''}`});
+  DB.updateLead(id,{historial});
+  renderHistorialList(historial);
+}
+
+function changeCotizEstado(cotizId,nuevoEstado){
+  const leadId=document.getElementById('modal-lead-id').value;
+  const lead=DB.getLeads().find(l=>l.id===leadId);
+  if(!lead) return;
+  const cotizaciones=(lead.cotizaciones||[]).map(c=>c.id===cotizId?{...c,estado:nuevoEstado}:c);
+  DB.updateLead(leadId,{cotizaciones});
+  renderCotizList(cotizaciones);
+  const cotiz=cotizaciones.find(c=>c.id===cotizId);
+  if(nuevoEstado==='ACEPTADA'&&cotiz){
+    // Suggest conversion
+    showToast('Cotización aceptada. Cambiá estado a GANADO para convertir.','success');
+    document.getElementById('modal-lead-estado').value='NEGOCIANDO';
+    onModalEstadoChange();
+  } else {
+    showToast('Estado actualizado a '+nuevoEstado,'success');
+  }
+}
+
+function getPipelinePotencial(){
+  return DB.getLeads().reduce((sum,l)=>{
+    if(!l.cotizaciones) return sum;
+    return sum+l.cotizaciones.filter(c=>c.estado==='ENVIADA').reduce((s,c)=>s+c.monto_ars,0);
+  },0);
+}
+
+function getLeadCotizTotal(lead){
+  if(!lead.cotizaciones||!lead.cotizaciones.length) return 0;
+  return lead.cotizaciones.filter(c=>c.estado==='ENVIADA').reduce((s,c)=>s+c.monto_ars,0);
 }
 
 // ── Provincia → Ciudad cascading filter ──

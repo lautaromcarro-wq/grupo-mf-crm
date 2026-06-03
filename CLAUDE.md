@@ -24,7 +24,7 @@ crm/
 **Grupo MF** vende fragancias y productos de cuidado personal B2B.
 
 ### Tipos de cliente
-PYME, Cadena de tiendas, Shopping, Supermercado, Farmacia, Perfumería, Outlet, Electrónica, Integrador / Partner
+PYME, Cadena de tiendas, Shopping, Supermercado, Farmacia, Perfumería, Outlet, Electrónica, Integrador / Partner, Local de ropa
 
 ### Canales de adquisición
 Google Ads, Meta Ads (Form), Meta Ads (DM), WhatsApp directo, Referido, Web
