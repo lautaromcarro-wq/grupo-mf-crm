@@ -203,10 +203,13 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
 .modal-close:hover{color:var(--text);border-color:var(--muted)}
 
 /* ── TOAST ── */
-#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 22px;font-size:13px;font-weight:500;z-index:9999;transition:transform .3s;pointer-events:none}
-#toast.show{transform:translateX(-50%) translateY(0)}
+#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 22px;font-size:13px;font-weight:500;z-index:9999;transition:transform .3s;display:flex;align-items:center;gap:12px}
+#toast.show{transform:translateX(-50%) translateY(0);pointer-events:auto}
 #toast.success{border-color:rgba(200,241,53,.4);color:var(--accent)}
 #toast.error{border-color:rgba(255,77,109,.4);color:var(--red)}
+#toast .toast-msg{flex:1}
+#toast .btn-undo{font-family:'Poppins',sans-serif;font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;border:1px solid var(--accent);background:rgba(59,130,246,.15);color:var(--accent);cursor:pointer;white-space:nowrap;transition:all .15s}
+#toast .btn-undo:hover{background:var(--accent);color:#0a0a0b}
 
 /* ── MISC ── */
 .hero-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
@@ -1226,16 +1229,32 @@ function renderPendientes(){
 
 function quickMarkContactado(id){
   const lead=DB.getLeads().find(l=>l.id===id);
-  const historial=(lead?.historial||[]).slice();
+  if(!lead) return;
+  const prevEstado=lead.estado;
+  const prevContacto=lead.fecha_ultimo_contacto;
+  const prevHistorial=(lead.historial||[]).slice();
+  const historial=prevHistorial.slice();
   historial.unshift({fecha:todayStr(),tipo:'CONTACTO',nota:'Contactado desde Pendientes'});
   DB.updateLead(id,{estado:'CONTACTADO',fecha_ultimo_contacto:todayStr(),historial});
-  showToast('✓ Marcado como contactado hoy','success');
   renderPendientes(); renderLeadsTable();
+  showToast('✓ Marcado como contactado','success',()=>{
+    DB.updateLead(id,{estado:prevEstado,fecha_ultimo_contacto:prevContacto,historial:prevHistorial});
+    renderPendientes(); renderLeadsTable();
+    showToast('Acción deshecha','success');
+  });
 }
 function quickMarkSinRespuesta(id){
+  const lead=DB.getLeads().find(l=>l.id===id);
+  if(!lead) return;
+  const prevEstado=lead.estado;
+  const prevContacto=lead.fecha_ultimo_contacto;
   DB.updateLead(id,{estado:'SIN RESPUESTA',fecha_ultimo_contacto:todayStr()});
-  showToast('Marcado como sin respuesta','success');
   renderPendientes(); renderLeadsTable();
+  showToast('Marcado como sin respuesta','success',()=>{
+    DB.updateLead(id,{estado:prevEstado,fecha_ultimo_contacto:prevContacto});
+    renderPendientes(); renderLeadsTable();
+    showToast('Acción deshecha','success');
+  });
 }
 
 // ── Dashboard ──
@@ -1479,10 +1498,16 @@ function badgeHtml(estado){
 }
 
 function deleteLead(id){
-  if(!confirm('¿Eliminar este lead?')) return;
+  const lead=DB.getLeads().find(l=>l.id===id);
+  if(!lead) return;
+  const snapshot=JSON.parse(JSON.stringify(lead));
   DB.deleteLead(id);
-  showToast('Lead eliminado','success');
   renderLeadsTable(); renderPendientes();
+  showToast('Lead eliminado','success',()=>{
+    DB.addLead(snapshot);
+    renderLeadsTable(); renderPendientes();
+    showToast('Lead restaurado','success');
+  });
 }
 
 // ── Ventas Table ──
@@ -1608,13 +1633,23 @@ function saveModalLead(){
     notas: document.getElementById('modal-lead-notas').value
   });
   if(estado==='GANADO'&&lead&&lead.estado!=='GANADO'&&document.getElementById('modal-lead-conversion').checked){
+    // Use accepted cotización amount if available
+    const freshLead=DB.getLeads().find(l=>l.id===id);
+    const cotizAceptada=(freshLead?.cotizaciones||[]).find(c=>c.estado==='ACEPTADA');
+    const cotizEnviada=(freshLead?.cotizaciones||[]).find(c=>c.estado==='ENVIADA');
+    const montoVenta=cotizAceptada?cotizAceptada.monto_ars:(cotizEnviada?cotizEnviada.monto_ars:0);
+    // Mark all ENVIADA cotizaciones as ACEPTADA
+    if(freshLead?.cotizaciones){
+      const cotizaciones=freshLead.cotizaciones.map(c=>c.estado==='ENVIADA'?{...c,estado:'ACEPTADA'}:c);
+      DB.updateLead(id,{cotizaciones});
+    }
     DB.addVenta({
       id:uid(),fecha_venta:todayStr(),nombre:lead.nombre,
       tipo_cliente:lead.tipo_cliente,categoria:lead.categoria,canal:lead.canal,
-      total_ars:0,total_usd:0,primera_venta:true,notas:''
+      total_ars:montoVenta,total_usd:0,primera_venta:true,notas:cotizAceptada?'Cotización: '+cotizAceptada.descripcion:''
     });
     closeModal('modal-lead');
-    showToast('Lead convertido a cliente. Completá los montos en Ventas.','success');
+    showToast(montoVenta>0?`Lead convertido · Venta creada por $${fmtARS(montoVenta)}`:'Lead convertido. Completá montos en Ventas.','success');
   } else {
     closeModal('modal-lead');
     showToast('Lead actualizado','success');
@@ -1703,9 +1738,28 @@ function saveVenta(){
   };
   DB.addVenta(venta);
   DB.setClientConfig(nombre,{dias_recompra:diasRecompra});
-  showToast('✓ Venta guardada','success');
+  // Auto-update lead to GANADO if exists and not already GANADO
+  const matchLead=DB.getLeads().find(l=>l.nombre===nombre&&!['GANADO','PERDIDO','DESCARTADO'].includes(l.estado));
+  if(matchLead){
+    const prevEstado=matchLead.estado;
+    const historial=(matchLead.historial||[]).slice();
+    historial.unshift({fecha:todayStr(),tipo:'NOTA',nota:`Venta registrada: $${fmtARS(venta.total_ars)}`});
+    DB.updateLead(matchLead.id,{estado:'GANADO',fecha_ultimo_contacto:todayStr(),historial});
+    // Mark any ENVIADA cotizaciones as ACEPTADA
+    if(matchLead.cotizaciones&&matchLead.cotizaciones.length){
+      const cotizaciones=matchLead.cotizaciones.map(c=>c.estado==='ENVIADA'?{...c,estado:'ACEPTADA'}:c);
+      DB.updateLead(matchLead.id,{cotizaciones});
+    }
+    showToast(`✓ Venta guardada · Lead "${nombre}" → GANADO`,'success',()=>{
+      DB.updateLead(matchLead.id,{estado:prevEstado});
+      showToast('Estado del lead restaurado','success');
+      renderLeadsTable(); renderPendientes();
+    });
+  } else {
+    showToast('✓ Venta guardada','success');
+  }
   clearVentaForm();
-  renderPendientes(); renderVentasTable();
+  renderPendientes(); renderVentasTable(); renderLeadsTable();
   setTimeout(()=>switchTab('ventas'),800);
 }
 
@@ -1809,11 +1863,24 @@ function updateTitle(){
   document.title=count>0?'('+count+') Grupo MF — CRM Operativo':'Grupo MF — CRM Operativo';
 }
 
-function showToast(msg,type='success'){
+function showToast(msg,type='success',undoFn=null){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.className='show '+type;
+  t.innerHTML=`<span class="toast-msg">${msg}</span>${undoFn?'<button class="btn-undo" id="toast-undo">Deshacer</button>':''}`;
+  t.className='show '+type;
   clearTimeout(window._toastTimer);
-  window._toastTimer=setTimeout(()=>t.className='',2500);
+  if(undoFn){
+    window._toastTimer=setTimeout(()=>{t.className='';window._undoFn=null;},3500);
+    window._undoFn=undoFn;
+    setTimeout(()=>{
+      const btn=document.getElementById('toast-undo');
+      if(btn) btn.onclick=()=>{
+        if(window._undoFn){window._undoFn();window._undoFn=null;}
+        t.className='';
+      };
+    },10);
+  } else {
+    window._toastTimer=setTimeout(()=>t.className='',2500);
+  }
 }
 
 // ── Tabs ──
@@ -2199,6 +2266,17 @@ function loadTheme(){
 loadTheme();
 
 // ── Start ──
+// If seed is empty and localStorage has old data, clear it for fresh start
+if(window.GMF_SEED && window.GMF_SEED.leads && window.GMF_SEED.leads.length===0){
+  // Only clear if this is first load with empty seed (check a flag)
+  if(!localStorage.getItem('gmf_fresh_v2')){
+    localStorage.removeItem('gmf_leads');
+    localStorage.removeItem('gmf_ventas');
+    localStorage.removeItem('gmf_clients_config');
+    localStorage.removeItem('gmf_setup_done');
+    localStorage.setItem('gmf_fresh_v2','1');
+  }
+}
 seedFromBundle();
 DB.markSetup();
 document.getElementById('setup-screen').style.display='none';
