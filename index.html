@@ -197,7 +197,7 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:var(--modal-overlay);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px;max-width:500px;width:100%;position:relative}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px;max-width:500px;width:100%;position:relative;max-height:90vh;overflow-y:auto}
 .modal-title{font-size:16px;font-weight:800;margin-bottom:20px}
 .modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .modal-close:hover{color:var(--text);border-color:var(--muted)}
@@ -526,6 +526,7 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <th onclick="sortVentas('nombre')">Cliente <span class="sort-arrow" id="sort-ventas-nombre"></span></th>
           <th>Tipo / Cat</th>
           <th>Canal</th>
+          <th onclick="sortVentas('producto')">Producto <span class="sort-arrow" id="sort-ventas-producto"></span></th>
           <th onclick="sortVentas('total_ars')">Total ARS <span class="sort-arrow" id="sort-ventas-total_ars"></span></th>
           <th>Total USD</th>
           <th>Primera</th>
@@ -572,6 +573,9 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <option>ELECTRÓNICA</option>
           <option>INTEGRADOR / PARTNER</option>
           <option>LOCAL DE ROPA</option>
+          <option>POLIRUBRO</option>
+          <option>JUGUETERÍA</option>
+          <option>BAZAR</option>
           <option>OTRO</option>
         </select>
       </div>
@@ -637,6 +641,18 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
         <input class="form-input" id="nl-ultimo-contacto" type="date">
       </div>
     </div>
+    <div class="form-divider"></div>
+    <div class="form-section-title">Cotización inicial (opcional)</div>
+    <div class="form-grid cols-3">
+      <div class="form-group">
+        <label class="form-label">Monto ARS</label>
+        <input class="form-input" id="nl-cotiz-monto" type="number" placeholder="ej: 250000" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <input class="form-input" id="nl-cotiz-desc" type="text" placeholder="ej: 5000 etiquetas + 200 hard tags">
+      </div>
+    </div>
     <div class="form-grid cols-1">
       <div class="form-group">
         <label class="form-label">Notas</label>
@@ -684,6 +700,24 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <option>ELECTRÓNICA</option>
           <option>INTEGRADOR / PARTNER</option>
           <option>LOCAL DE ROPA</option>
+          <option>POLIRUBRO</option>
+          <option>JUGUETERÍA</option>
+          <option>BAZAR</option>
+          <option>OTRO</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Producto vendido</label>
+        <select class="form-select" id="nv-producto">
+          <option value="">Seleccionar...</option>
+          <option>ETIQUETAS</option>
+          <option>HARD TAGS</option>
+          <option>IMANES</option>
+          <option>ANTENA MONO ALUMINIO</option>
+          <option>ANTENA MONO PF20</option>
+          <option>DESACTIVADOR ELECTRÓNICO</option>
+          <option>PINES</option>
+          <option>LAZOS</option>
           <option>OTRO</option>
         </select>
       </div>
@@ -1444,8 +1478,11 @@ function renderLeadsTable(){
   // Sort
   leads.sort((a,b)=>{
     let va=a[leadsSort.field]??'', vb=b[leadsSort.field]??'';
-    if(typeof va==='number') return (va-vb)*leadsSort.dir;
-    return String(va).localeCompare(String(vb))*leadsSort.dir;
+    let cmp;
+    if(typeof va==='number') cmp=(va-vb);
+    else cmp=String(va).localeCompare(String(vb));
+    if(cmp===0) cmp=(a.id||'').localeCompare(b.id||'');
+    return cmp*leadsSort.dir;
   });
 
   const total = leads.length;
@@ -1564,7 +1601,7 @@ function renderVentasTable(){
 
   const tbody = document.getElementById('ventas-tbody');
   if(slice.length===0){
-    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:40px">Sin resultados</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:40px">Sin resultados</td></tr>`;
     document.getElementById('ventas-pagination').innerHTML='';
     return;
   }
@@ -1578,6 +1615,7 @@ function renderVentasTable(){
     <td class="td-empresa">${v.nombre}</td>
     <td><div style="font-size:11px">${v.tipo_cliente||'—'}</div><div class="td-dim">${v.categoria||'—'}</div></td>
     <td class="td-dim">${v.canal||'—'}</td>
+    <td class="td-dim" style="font-size:11px">${v.producto||'—'}</td>
     <td class="td-mono" style="color:var(--accent)">${v.total_ars?'$'+fmtARS(v.total_ars):'—'}</td>
     <td class="td-mono" style="color:var(--orange)">${v.total_usd?'U$D '+v.total_usd.toLocaleString():'—'}</td>
     <td>${v.primera_venta?'<span style="color:var(--accent);font-size:11px">★ Sí</span>':'—'}</td>
@@ -1701,17 +1739,24 @@ function saveLead(){
     fecha_ultimo_contacto: document.getElementById('nl-ultimo-contacto').value||null,
     dias_followup: parseInt(document.getElementById('nl-dias-followup').value)||7,
     notas: document.getElementById('nl-notas').value.trim(),
-    historial: []
+    historial: [],
+    cotizaciones: []
   };
+  // Cotización inicial si hay monto
+  const cotizMonto=parseFloat(document.getElementById('nl-cotiz-monto').value)||0;
+  if(cotizMonto>0){
+    lead.cotizaciones.push({id:uid(),fecha:todayStr(),monto_ars:cotizMonto,descripcion:document.getElementById('nl-cotiz-desc').value.trim()||'Cotización inicial',estado:'ENVIADA'});
+    if(['NUEVO','CONTACTADO'].includes(lead.estado)) lead.estado='EN COTIZACIÓN';
+  }
   DB.addLead(lead);
-  showToast('✓ Lead guardado','success');
+  showToast(cotizMonto>0?'✓ Lead guardado con cotización':'✓ Lead guardado','success');
   clearLeadForm();
   renderPendientes(); renderLeadsTable();
   setTimeout(()=>switchTab('leads'),800);
 }
 
 function clearLeadForm(){
-  ['nl-nombre','nl-provincia','nl-ciudad','nl-mail','nl-wpp','nl-notas','nl-ultimo-contacto'].forEach(id=>document.getElementById(id).value='');
+  ['nl-nombre','nl-provincia','nl-ciudad','nl-mail','nl-wpp','nl-notas','nl-ultimo-contacto','nl-cotiz-monto','nl-cotiz-desc'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nl-fecha').value=todayStr();
   document.getElementById('nl-dias-followup').value='14';
   ['nl-tipo','nl-categoria','nl-canal'].forEach(id=>document.getElementById(id).value='');
@@ -1731,6 +1776,7 @@ function saveVenta(){
     tipo_cliente: document.getElementById('nv-tipo').value,
     categoria: document.getElementById('nv-categoria').value,
     canal: document.getElementById('nv-canal').value,
+    producto: document.getElementById('nv-producto').value,
     total_ars: parseFloat(document.getElementById('nv-total-ars').value)||0,
     total_usd: parseFloat(document.getElementById('nv-total-usd').value)||0,
     primera_venta: document.getElementById('nv-primera').value==='1',
@@ -1770,7 +1816,7 @@ function clearVentaForm(){
   document.getElementById('nv-total-usd').value='';
   document.getElementById('nv-primera').value='0';
   document.getElementById('nv-dias-recompra').value='45';
-  ['nv-tipo','nv-categoria','nv-canal'].forEach(id=>document.getElementById(id).value='');
+  ['nv-tipo','nv-categoria','nv-canal','nv-producto'].forEach(id=>document.getElementById(id).value='');
 }
 
 // ── Client autocomplete ──
