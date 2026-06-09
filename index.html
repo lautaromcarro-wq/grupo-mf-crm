@@ -781,11 +781,62 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
 
 <!-- MODAL: Editar lead -->
 <div class="modal-overlay" id="modal-lead">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:620px">
     <button class="modal-close" onclick="closeModal('modal-lead')">✕</button>
     <div class="modal-title" id="modal-lead-title">Editar lead</div>
     <input type="hidden" id="modal-lead-id">
-    <div class="form-grid cols-1" style="gap:14px">
+    <div class="form-grid cols-2" style="gap:14px">
+      <div class="form-group">
+        <label class="form-label">Empresa / Nombre</label>
+        <input class="form-input" id="modal-lead-nombre" type="text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">WhatsApp</label>
+        <input class="form-input" id="modal-lead-wpp" type="text" placeholder="ej: 11-65432100">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="modal-lead-mail" type="text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de cliente</label>
+        <select class="form-select" id="modal-lead-tipo">
+          <option value="">Seleccionar...</option>
+          <option>PYME</option><option>CADENA DE TIENDAS</option><option>SHOPPING</option>
+          <option>SUPERMERCADO</option><option>FARMACIA</option><option>PERFUMERÍA</option>
+          <option>OUTLET</option><option>ELECTRÓNICA</option><option>INTEGRADOR / PARTNER</option>
+          <option>LOCAL DE ROPA</option><option>POLIRUBRO</option><option>JUGUETERÍA</option>
+          <option>BAZAR</option><option>OTRO</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Canal</label>
+        <select class="form-select" id="modal-lead-canal">
+          <option value="">Seleccionar...</option>
+          <option>GOOGLE ADS</option><option>META ADS (FORM)</option><option>META ADS (DM)</option>
+          <option>WHATSAPP DIRECTO</option><option>REFERIDO</option><option>WEB</option><option>OTRO</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Calificación</label>
+        <select class="form-select" id="modal-lead-categoria">
+          <option value="">Seleccionar...</option>
+          <option value="A">A (Muy calificado)</option>
+          <option value="B">B (Potencial)</option>
+          <option value="C">C (Frío)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Provincia</label>
+        <input class="form-input" id="modal-lead-provincia" type="text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ciudad</label>
+        <input class="form-input" id="modal-lead-ciudad" type="text">
+      </div>
+    </div>
+    <div class="form-divider" style="margin:14px 0"></div>
+    <div class="form-grid cols-2" style="gap:14px">
       <div class="form-group">
         <label class="form-label">Estado</label>
         <select class="form-select" id="modal-lead-estado" onchange="onModalEstadoChange()">
@@ -799,20 +850,22 @@ tbody td{padding:12px 16px;font-size:12px;vertical-align:middle}
           <option value="DESCARTADO">Descartado</option>
         </select>
       </div>
-      <div class="conversion-box" id="conversion-box">
-        <label class="checkbox-label">
-          <input type="checkbox" id="modal-lead-conversion" checked>
-          Registrar primera venta (montos en $0, completar en Ventas)
-        </label>
-      </div>
       <div class="form-group">
         <label class="form-label">Último contacto</label>
         <input class="form-input" id="modal-lead-contacto" type="date">
       </div>
       <div class="form-group">
-        <label class="form-label">Días para alerta de seguimiento</label>
+        <label class="form-label">Días para alerta</label>
         <input class="form-input" id="modal-lead-dias" type="number" min="1" max="365">
       </div>
+    </div>
+    <div class="conversion-box" id="conversion-box">
+      <label class="checkbox-label">
+        <input type="checkbox" id="modal-lead-conversion" checked>
+        Registrar primera venta (montos en $0, completar en Ventas)
+      </label>
+    </div>
+    <div class="form-grid cols-1" style="gap:14px">
       <div class="form-group">
         <label class="form-label">Notas</label>
         <textarea class="form-textarea" id="modal-lead-notas" style="min-height:60px"></textarea>
@@ -1645,6 +1698,14 @@ function openLeadModal(id){
   if(!lead) return;
   document.getElementById('modal-lead-title').textContent = lead.nombre;
   document.getElementById('modal-lead-id').value = id;
+  document.getElementById('modal-lead-nombre').value = lead.nombre||'';
+  document.getElementById('modal-lead-wpp').value = lead.wpp||'';
+  document.getElementById('modal-lead-mail').value = lead.mail||'';
+  document.getElementById('modal-lead-tipo').value = lead.tipo_cliente||'';
+  document.getElementById('modal-lead-canal').value = lead.canal||'';
+  document.getElementById('modal-lead-categoria').value = lead.categoria||'';
+  document.getElementById('modal-lead-provincia').value = lead.provincia||'';
+  document.getElementById('modal-lead-ciudad').value = lead.ciudad||'';
   document.getElementById('modal-lead-estado').value = lead.estado;
   document.getElementById('modal-lead-contacto').value = lead.fecha_ultimo_contacto||'';
   document.getElementById('modal-lead-dias').value = lead.dias_followup||14;
@@ -1664,8 +1725,17 @@ function saveModalLead(){
   const id = document.getElementById('modal-lead-id').value;
   const estado = document.getElementById('modal-lead-estado').value;
   const lead = DB.getLeads().find(l=>l.id===id);
+  const newNombre=document.getElementById('modal-lead-nombre').value.trim().toUpperCase();
   DB.updateLead(id,{
     estado,
+    nombre: newNombre||lead.nombre,
+    wpp: document.getElementById('modal-lead-wpp').value.trim(),
+    mail: document.getElementById('modal-lead-mail').value.trim(),
+    tipo_cliente: document.getElementById('modal-lead-tipo').value,
+    canal: document.getElementById('modal-lead-canal').value,
+    categoria: document.getElementById('modal-lead-categoria').value,
+    provincia: document.getElementById('modal-lead-provincia').value.trim().toUpperCase(),
+    ciudad: document.getElementById('modal-lead-ciudad').value.trim().toUpperCase(),
     fecha_ultimo_contacto: document.getElementById('modal-lead-contacto').value||null,
     dias_followup: parseInt(document.getElementById('modal-lead-dias').value)||7,
     notas: document.getElementById('modal-lead-notas').value
